@@ -1,53 +1,30 @@
-//
-//  ========================================================================
-//  Copyright (c) 1995-2016 Mort Bay Consulting Pty. Ltd.
-//  ------------------------------------------------------------------------
-//  All rights reserved. This program and the accompanying materials
-//  are made available under the terms of the Eclipse Public License v1.0
-//  and Apache License v2.0 which accompanies this distribution.
-//
-//      The Eclipse Public License is available at
-//      http://www.eclipse.org/legal/epl-v10.html
-//
-//      The Apache License v2.0 is available at
-//      http://www.opensource.org/licenses/apache2.0.php
-//
-//  You may elect to redistribute this code under either of these licenses.
-//  ========================================================================
-//
 package com.simon_transporte.suite;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.file.Path;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Option.Builder;
-import org.apache.commons.cli.OptionGroup;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathFactory;
+
+import org.apache.commons.configuration2.HierarchicalConfiguration;
 import org.apache.commons.configuration2.XMLConfiguration;
-import org.apache.tomcat.util.scan.StandardJarScanner;
-import org.eclipse.jetty.apache.jsp.JettyJasperInitializer;
-import org.eclipse.jetty.jsp.JettyJspServlet;
+import org.apache.commons.configuration2.builder.BasicConfigurationBuilder;
+import org.apache.commons.configuration2.builder.fluent.Parameters;
+import org.apache.commons.configuration2.io.FileHandler;
+import org.apache.commons.configuration2.tree.ImmutableNode;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
-import org.eclipse.jetty.servlet.DefaultServlet;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
-import org.eclipse.jetty.util.component.AbstractLifeCycle;
+import org.w3c.dom.NodeList;
 
-import com.acme.DateServlet;
+import com.simon_transporte.suite.db.pojo.Address;
+
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.Persistence;
+import jakarta.persistence.PersistenceConfiguration;;
 
 /**
  * Example of using JSP's with embedded jetty and using a lighter-weight
@@ -62,76 +39,30 @@ import com.acme.DateServlet;
  */
 public class Main {
 
-	// Resource path pointing to where the WEBROOT is
-	private static final String WEBROOT_INDEX = "/webroot/";
-
-	/**
-	 * JspStarter for embedded ServletContextHandlers
-	 * 
-	 * This is added as a bean that is a jetty LifeCycle on the
-	 * ServletContextHandler. This bean's doStart method will be called as the
-	 * ServletContextHandler starts, and will call the ServletContainerInitializer
-	 * for the jsp engine.
-	 *
-	 */
-	public static class JspStarter extends AbstractLifeCycle
-			implements ServletContextHandler.ServletContainerInitializerCaller {
-		JettyJasperInitializer sci;
-		ServletContextHandler context;
-
-		public JspStarter(ServletContextHandler context) {
-			this.sci = new JettyJasperInitializer();
-			this.context = context;
-			this.context.setAttribute("org.apache.tomcat.JarScanner", new StandardJarScanner());
-		}
-
-		@Override
-		protected void doStart() throws Exception {
-			ClassLoader old = Thread.currentThread().getContextClassLoader();
-			Thread.currentThread().setContextClassLoader(context.getClassLoader());
-			try {
-				sci.onStartup(null, context.getServletContext());
-				super.doStart();
-			} finally {
-				Thread.currentThread().setContextClassLoader(old);
-			}
-		}
-	}
-
 	public static void main(String[] args) throws Exception {
-		CommandLine cmd = parseCMDoptions(args);
+		String fn = args.length > 0 ? args[0] : System.getProperty("simon.configfile");
+		if (fn == null) {
+			System.err.println("Configfile argument missing / env simon.configfile not set");
+			System.exit(1);
+		}
+		File conffile = new File(fn);
+		if (!conffile.isFile() || !conffile.canRead()) {
+			System.err.println("config file not found! " + conffile.getAbsolutePath());
+			System.exit(1);
+		}
 
-		FileInputStream fis = new FileInputStream(cmd.getOptionValue("f"));
-		XMLConfiguration conf = new XMLConfiguration();
-		conf.read(fis);
+		XMLConfiguration conf = new BasicConfigurationBuilder<>(XMLConfiguration.class)
+				.configure(new Parameters().xml()).getConfiguration();
+		FileHandler fh = new FileHandler(conf);
+		fh.load(new FileInputStream(conffile));
 
-	}
+		int port = conf.getInt("server.port");
+		String persistanceUnit = conf.getString("persistanceUnit");
 
-	private static CommandLine parseCMDoptions(String[] args) throws ParseException {
-		OptionGroup confFile = new OptionGroup();
-
-		Option o = Option.builder("f").longOpt("configfile").type(String.class).build();
-
-		confFile.addOption(o);
-
-		OptionGroup classic = new OptionGroup();
-
-		o = Option.builder("p").longOpt("port").desc("port of Server").required(true).numberOfArgs(1).type(int.class)
-				.build();
-		classic.addOption(o);
-
-		o = Option.builder("b").longOpt("bind-adress").required(false).type(String.class).numberOfArgs(1).build();
-		classic.addOption(o);
-
-		o = Option.builder("r").longOpt("webroot").required(true).type(Path.class).numberOfArgs(Option.UNLIMITED_VALUES)
-				.build();
-		classic.addOption(o);
-
-		Options options = new Options();
-		options.addOptionGroup(confFile);
-		options.addOptionGroup(classic);
-
-		return new DefaultParser().parse(options, args);
+		Main m = new Main(port, Persistence.createEntityManagerFactory(persistanceUnit));
+		m.start();
+		m.waitForInterrupt();
+		m.stop();
 	}
 
 	private static final Logger LOG = Logger.getLogger(Main.class.getName());
@@ -139,8 +70,11 @@ public class Main {
 	private int port;
 	private Server server;
 
-	public Main(int port) {
+	private EntityManagerFactory emFactory;
+
+	public Main(int port, EntityManagerFactory emFactory) {
 		this.port = port;
+		this.emFactory = emFactory;
 	}
 
 	public void start() throws Exception {
@@ -151,32 +85,18 @@ public class Main {
 		connector.setPort(port);
 		server.addConnector(connector);
 
-		// Base URI for servlet context
-		URI baseUri = getWebRootResourceUri();
-		LOG.info("Base URI: " + baseUri);
-
 		// Create Servlet context
 		ServletContextHandler servletContextHandler = new ServletContextHandler(ServletContextHandler.SESSIONS);
 		servletContextHandler.setContextPath("/");
-		String base = baseUri.toASCIIString();
-		servletContextHandler.setResourceBase(base);
-
-		// Since this is a ServletContextHandler we must manually configure JSP support.
-		enableEmbeddedJspSupport(servletContextHandler);
-
-		// Add Application Servlets
-		servletContextHandler.addServlet(DateServlet.class, "/date/");
-		// Create Example of mapping jsp to path spec
-		ServletHolder holderAltMapping = new ServletHolder();
-		holderAltMapping.setName("foo.jsp");
-		holderAltMapping.setForcedPath("/test/foo/foo.jsp");
-		servletContextHandler.addServlet(holderAltMapping, "/test/foo/");
 
 		// Default Servlet (always last, always named "default")
-		ServletHolder holderDefault = new ServletHolder("default", DefaultServlet.class);
-		holderDefault.setInitParameter("resourceBase", baseUri.toASCIIString());
-		holderDefault.setInitParameter("dirAllowed", "true");
-		servletContextHandler.addServlet(holderDefault, "/");
+		WebserviceServet wss = new WebserviceServet();
+		wss.entityManager = emFactory.createEntityManager();
+
+		ServletHolder holderDefault = new ServletHolder("default", wss);
+		holderDefault.setInitParameter("ws-package", Address.class.getPackageName());
+
+		servletContextHandler.addServlet(holderDefault, "/api/db/*");
 		server.setHandler(servletContextHandler);
 
 		// Start Server
@@ -186,58 +106,6 @@ public class Main {
 		if (LOG.isLoggable(Level.FINE)) {
 			LOG.fine(server.dump());
 		}
-	}
-
-	/**
-	 * Setup JSP Support for ServletContextHandlers.
-	 * <p>
-	 * NOTE: This is not required or appropriate if using a WebAppContext.
-	 * </p>
-	 *
-	 * @param servletContextHandler the ServletContextHandler to configure
-	 * @throws IOException if unable to configure
-	 */
-	private void enableEmbeddedJspSupport(ServletContextHandler servletContextHandler) throws IOException {
-		// Establish Scratch directory for the servlet context (used by JSP compilation)
-		File tempDir = new File(System.getProperty("java.io.tmpdir"));
-		File scratchDir = new File(tempDir.toString(), "embedded-jetty-jsp");
-
-		if (!scratchDir.exists()) {
-			if (!scratchDir.mkdirs()) {
-				throw new IOException("Unable to create scratch directory: " + scratchDir);
-			}
-		}
-		servletContextHandler.setAttribute("javax.servlet.context.tempdir", scratchDir);
-
-		// Set Classloader of Context to be sane (needed for JSTL)
-		// JSP requires a non-System classloader, this simply wraps the
-		// embedded System classloader in a way that makes it suitable
-		// for JSP to use
-		ClassLoader jspClassLoader = new URLClassLoader(new URL[0], Main.class.getClassLoader());
-		servletContextHandler.setClassLoader(jspClassLoader);
-
-		// Manually call JettyJasperInitializer on context startup
-		servletContextHandler.addBean(new JspStarter(servletContextHandler));
-
-		// Create / Register JSP Servlet (must be named "jsp" per spec)
-		ServletHolder holderJsp = new ServletHolder("jsp", JettyJspServlet.class);
-		holderJsp.setInitOrder(0);
-		holderJsp.setInitParameter("logVerbosityLevel", "DEBUG");
-		holderJsp.setInitParameter("fork", "false");
-		holderJsp.setInitParameter("xpoweredBy", "false");
-		holderJsp.setInitParameter("compilerTargetVM", "1.8");
-		holderJsp.setInitParameter("compilerSourceVM", "1.8");
-		holderJsp.setInitParameter("keepgenerated", "true");
-		servletContextHandler.addServlet(holderJsp, "*.jsp");
-	}
-
-	private URI getWebRootResourceUri() throws FileNotFoundException, URISyntaxException {
-		URL indexUri = this.getClass().getResource(WEBROOT_INDEX);
-		if (indexUri == null) {
-			throw new FileNotFoundException("Unable to find resource " + WEBROOT_INDEX);
-		}
-		// Points to wherever /webroot/ (the resource) is
-		return indexUri.toURI();
 	}
 
 	public void stop() throws Exception {
@@ -255,4 +123,5 @@ public class Main {
 	public void waitForInterrupt() throws InterruptedException {
 		server.join();
 	}
+
 }

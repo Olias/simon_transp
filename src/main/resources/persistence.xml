@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<persistence xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:noNamespaceSchemaLocation="persistence_1_0.xsd" version="1.0" >
+  <persistence-unit name="simon_MySQL">
+    <provider>org.apache.openjpa.persistence.PersistenceProviderImpl</provider>
+   
+    <properties>
+      <property name="openjpa.ConnectionURL" value="jdbc:hsqldb:tutorial_database"/>
+      <property name="openjpa.ConnectionDriverName" value="org.hsqldb.jdbcDriver"/>
+      <property name="openjpa.ConnectionUserName" value="sa"/>
+      <property name="openjpa.ConnectionPassword" value=""/>
+      <property name="openjpa.Log" value="DefaultLevel=WARN, Tool=INFO"/>
+    </properties>
+  </persistence-unit>
+</persistence>

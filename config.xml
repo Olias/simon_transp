@@ -1,0 +1,11 @@
+<config>
+
+	<server>
+		<port>8080</port>
+		<webroot>./webroot/</webroot><!-- UNC path is allowed-->
+		<bindAddr>0.0.0.0</bindAddr>
+	</server>
+	<persistanceUnit>simon_MySQL</persistanceUnit>
+
+
+</config>
