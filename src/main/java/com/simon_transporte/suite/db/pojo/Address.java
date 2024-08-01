@@ -2,13 +2,24 @@ package com.simon_transporte.suite.db.pojo;
 
 import jakarta.jws.WebService;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
+import jakarta.xml.bind.annotation.XmlElement;
 
 @WebService
 @Entity
+@XmlAccessorType(XmlAccessType.FIELD)
 public class Address {
+	
+	public Address() {
+	}
 
 	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private int id;
 	private String firstName;
 	private String lastName;

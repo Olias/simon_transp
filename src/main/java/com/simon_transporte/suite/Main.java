@@ -2,6 +2,9 @@ package com.simon_transporte.suite;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -14,6 +17,7 @@ import org.apache.commons.configuration2.builder.BasicConfigurationBuilder;
 import org.apache.commons.configuration2.builder.fluent.Parameters;
 import org.apache.commons.configuration2.io.FileHandler;
 import org.apache.commons.configuration2.tree.ImmutableNode;
+import org.apache.openjpa.enhance.RuntimeUnenhancedClassesModes;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.servlet.ServletContextHandler;
@@ -57,12 +61,26 @@ public class Main {
 		fh.load(new FileInputStream(conffile));
 
 		int port = conf.getInt("server.port");
-		String persistanceUnit = conf.getString("persistanceUnit");
+		
 
-		Main m = new Main(port, Persistence.createEntityManagerFactory(persistanceUnit));
+		Main m = new Main(port, getEmFactory(conf));
 		m.start();
 		m.waitForInterrupt();
 		m.stop();
+	}
+
+	private static EntityManagerFactory getEmFactory(XMLConfiguration conf) {
+		String persistanceUnit = conf.getString("persistance.persistanceUnit");
+		List<HierarchicalConfiguration<ImmutableNode>> props = conf.configurationsAt("persistance.prop", false);
+		Map<String, String> properies = new HashMap<String, String>();
+		for (HierarchicalConfiguration prop : props) {
+			String name = prop.getString(".[@name]");
+			String val = prop.getString(".");
+			properies.put(name, val);
+		}
+		
+		
+		return Persistence.createEntityManagerFactory(persistanceUnit, properies);
 	}
 
 	private static final Logger LOG = Logger.getLogger(Main.class.getName());
@@ -91,7 +109,7 @@ public class Main {
 
 		// Default Servlet (always last, always named "default")
 		WebserviceServet wss = new WebserviceServet();
-		wss.entityManager = emFactory.createEntityManager();
+		wss.entityManagerFactory = emFactory;
 
 		ServletHolder holderDefault = new ServletHolder("default", wss);
 		holderDefault.setInitParameter("ws-package", Address.class.getPackageName());

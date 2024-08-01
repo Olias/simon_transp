@@ -2,10 +2,16 @@
 
 	<server>
 		<port>8080</port>
-		<webroot>./webroot/</webroot><!-- UNC path is allowed-->
+		<webroot>./webroot/</webroot><!-- UNC path is allowed -->
 		<bindAddr>0.0.0.0</bindAddr>
 	</server>
-	<persistanceUnit>simon_MySQL</persistanceUnit>
-
+	<persistance>
+		<persistanceUnit>simon_MySQL</persistanceUnit>
+		<prop name="jakarta.persistence.jdbc.url">jdbc:mariadb://localhost:3306/simon</prop>
+		<prop name="jakarta.persistence.jdbc.user">simon</prop>
+		<prop name="jakarta.persistence.jdbc.password">Aepee9Uo cha5Mohm</prop>
+		<prop name="jakarta.persistence.jdbc.driver">org.mariadb.jdbc.Driver</prop>
+		<prop name="openjpa.RuntimeUnenhancedClasses">supported</prop>
+	</persistance>
 
 </config>

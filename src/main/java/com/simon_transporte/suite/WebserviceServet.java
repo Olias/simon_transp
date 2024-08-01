@@ -12,11 +12,19 @@ import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.apache.openjpa.enhance.PCEnhancer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jakarta.jws.WebService;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Id;
+import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.PersistenceException;
+import jakarta.persistence.PersistenceUnit;
+import jakarta.persistence.SynchronizationType;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,10 +33,14 @@ import jakarta.xml.bind.JAXB;
 import jakarta.xml.ws.WebServiceException;
 
 public class WebserviceServet extends HttpServlet {
+	
+	protected Logger log = LoggerFactory.getLogger(getClass());
 
 	private static final long serialVersionUID = -5479986178622823799L;
 	Map<String, Class<?>> wsServices = new HashMap<String, Class<?>>();
-	public EntityManager entityManager = null;
+
+	@PersistenceUnit
+	public EntityManagerFactory entityManagerFactory;
 
 	@Override
 	public void init() {
@@ -51,20 +63,28 @@ public class WebserviceServet extends HttpServlet {
 				String name = anno.name().length() > 0 ? anno.name() : c.getSimpleName();
 				if (wsServices.containsKey(name)) {
 					Class<?> other = wsServices.get(name).getClass();
-					throw new WebServiceException("Webserice name conflict '" + name + "' " + other.getCanonicalName()
-							+ " vs " + c.getCanonicalName());
+					throw new WebServiceException("Webservice name conflict '" + name + "' " + other.getCanonicalName()
+							+ ", " + c.getCanonicalName());
 				}
+				
+				if (c.getAnnotation(Entity.class) != null)
+					PCEnhancer.main(new String[]{c.getCanonicalName()});
 
 				try {
 					wsServices.put(name, c);
 				} catch (Exception e) {
+					log.error(e.getMessage(), e);
 					throw new WebServiceException(e);
 				}
 			}
+			
+		
+			
 		}
+		
 	}
 
-	private Class getClass(String className, String packageName) {
+	private Class<?> getClass(String className, String packageName) {
 		try {
 			Class<?> cls = Class.forName(packageName + "." + className.substring(0, className.lastIndexOf('.')));
 			return cls;
@@ -89,6 +109,7 @@ public class WebserviceServet extends HttpServlet {
 		doRW(req, resp);
 	}
 
+	@PersistenceContext
 	protected void doRW(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
 		String qry = req.getQueryString();
 		String path = req.getRequestURI();
@@ -106,6 +127,8 @@ public class WebserviceServet extends HttpServlet {
 
 		Class<?> ws = wsServices.get(pathParts[0]);
 
+		// JAXBContext jaxbContext = JAXBContext.newInstance(ws);
+
 		if (ws == null) {
 			resp.setStatus(404);
 			resp.getOutputStream().write("Webservice not found\n".getBytes(StandardCharsets.UTF_8));
@@ -113,6 +136,7 @@ public class WebserviceServet extends HttpServlet {
 		}
 
 		if (ws.getAnnotation(Entity.class) != null) {
+
 			Field idField = null;
 			for (Field field : ws.getDeclaredFields()) {
 				if (field.getAnnotation(Id.class) != null) {
@@ -134,10 +158,18 @@ public class WebserviceServet extends HttpServlet {
 					id = pathParts[1];
 			}
 
+			EntityManager entityManager = entityManagerFactory.createEntityManager(SynchronizationType.SYNCHRONIZED);
+			entityManager.getTransaction().begin();
+
 			try {
 				switch (req.getMethod()) {
 				case "GET":
-					Object ent = entityManager.getReference(ws, id);
+					Object ent = entityManager.find(ws, id);
+					if (ent == null) {
+						resp.setStatus(404);
+						resp.getWriter().write("not found\n");
+						break;
+					}
 					JAXB.marshal(ent, resp.getWriter());
 					resp.setStatus(200);
 					break;
@@ -145,10 +177,19 @@ public class WebserviceServet extends HttpServlet {
 					ent = JAXB.unmarshal(req.getReader(), ws);
 					entityManager.persist(ent);
 					resp.setStatus(200);
-					JAXB.marshal(idField.get(ent), resp.getWriter());
-				}	
+					entityManager.flush();
+					entityManager.getTransaction().commit();
+					JAXB.marshal(ent, resp.getWriter());
+				}
+
 			} catch (Exception e) {
+				resp.setStatus(500);
+				log.error(e.getMessage(), e);
 				throw new ServletException(e);
+			} finally {
+				if (entityManager.getTransaction().isActive() )
+					entityManager.getTransaction().rollback();
+				entityManager.close();
 			}
 		}
 

@@ -24,6 +24,7 @@
 
 
 	<dependencies>
+		<!-- commons -->
 		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-configuration2</artifactId>
@@ -39,6 +40,8 @@
 			<artifactId>jakarta.xml.ws-api</artifactId>
 			<version>4.0.2</version>
 		</dependency>
+
+		<!-- jpa / DB -->
 		<dependency>
 			<groupId>jakarta.persistence</groupId>
 			<artifactId>jakarta.persistence-api</artifactId>
@@ -49,8 +52,18 @@
 			<artifactId>openjpa</artifactId>
 			<version>4.0.0</version>
 		</dependency>
+		<dependency>
+			<groupId>org.mariadb.jdbc</groupId>
+			<artifactId>mariadb-java-client</artifactId>
+			<version>3.4.1</version>
+		</dependency>
 
-
+		<!-- webserver / xml stuff-->
+		<dependency>
+			<groupId>com.sun.xml.bind</groupId>
+			<artifactId>jaxb-impl</artifactId>
+			<version>4.0.5</version>
+		</dependency>
 		<dependency>
 			<groupId>org.apache.tomcat</groupId>
 			<artifactId>tomcat-util-scan</artifactId>
@@ -77,23 +90,11 @@
 			<version>${jetty.version}</version>
 		</dependency>
 
-
-		<dependency>
-			<groupId>org.apache.logging.log4j</groupId>
-			<artifactId>log4j-core</artifactId>
-			<version>2.23.1</version>
-		</dependency>
-		<dependency>
-			<groupId>ch.qos.logback</groupId>
-			<artifactId>logback-core</artifactId>
-			<version>1.5.6</version>
-		</dependency>
+		<!-- logging -->
 		<dependency>
 			<groupId>ch.qos.logback</groupId>
 			<artifactId>logback-classic</artifactId>
 			<version>1.5.6</version>
 		</dependency>
-
-
 	</dependencies>
 </project>
