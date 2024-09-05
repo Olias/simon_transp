@@ -28,7 +28,9 @@ import com.simon_transporte.suite.db.pojo.Address;
 
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
-import jakarta.persistence.PersistenceConfiguration;;
+import jakarta.persistence.PersistenceConfiguration;
+import jakarta.persistence.SchemaManager;
+import jakarta.persistence.SchemaValidationException;;
 
 /**
  * Example of using JSP's with embedded jetty and using a lighter-weight
@@ -54,12 +56,12 @@ public class Main {
 			System.err.println("config file not found! " + conffile.getAbsolutePath());
 			System.exit(1);
 		}
-
+		
 		XMLConfiguration conf = new BasicConfigurationBuilder<>(XMLConfiguration.class)
 				.configure(new Parameters().xml()).getConfiguration();
 		FileHandler fh = new FileHandler(conf);
 		fh.load(new FileInputStream(conffile));
-
+		
 		int port = conf.getInt("server.port");
 		
 

@@ -10,7 +10,6 @@
 		<prop name="jakarta.persistence.jdbc.url">jdbc:mariadb://localhost:3306/simon</prop>
 		<prop name="jakarta.persistence.jdbc.user">simon</prop>
 		<prop name="jakarta.persistence.jdbc.password">Aepee9Uo cha5Mohm</prop>
-		<prop name="jakarta.persistence.jdbc.driver">org.mariadb.jdbc.Driver</prop>
 		<prop name="openjpa.RuntimeUnenhancedClasses">supported</prop>
 	</persistance>
 

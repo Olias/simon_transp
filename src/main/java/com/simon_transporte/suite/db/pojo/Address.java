@@ -1,6 +1,7 @@
 package com.simon_transporte.suite.db.pojo;
 
 import jakarta.jws.WebService;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -22,6 +23,8 @@ public class Address {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private int id;
 	private String firstName;
+	
+	@Column(nullable = false)
 	private String lastName;
 	
 	
@@ -42,6 +45,21 @@ public class Address {
 	}
 	public void setLastName(String lastName) {
 		this.lastName = lastName;
+	}
+	
+	@Override
+	public String toString() {
+		StringBuilder sb = new StringBuilder();
+		if (lastName != null) {
+			sb.append(lastName);
+		}
+		
+		if (firstName != null) {
+			sb.append(',');
+			sb.append(firstName);
+		}
+		
+		return sb.toString();
 	}
 	
 	
