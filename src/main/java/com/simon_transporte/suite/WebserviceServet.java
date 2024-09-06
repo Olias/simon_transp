@@ -1,18 +1,23 @@
 package com.simon_transporte.suite;
 
+import java.beans.BeanInfo;
+import java.beans.Introspector;
+import java.beans.PropertyDescriptor;
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
+import java.io.StringReader;
 import java.io.Writer;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -32,9 +37,11 @@ import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.PersistenceException;
 import jakarta.persistence.PersistenceUnit;
 import jakarta.persistence.SynchronizationType;
+import jakarta.persistence.Transient;
 import jakarta.persistence.TypedQuery;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
@@ -121,7 +128,7 @@ public class WebserviceServet extends HttpServlet {
 	}
 
 	@PersistenceContext
-	protected void doRW(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+	protected <T> void doRW(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
 		String qry = req.getQueryString();
 		String path = req.getRequestURI();
 		String servPath = Pattern.quote(req.getServletPath());
@@ -177,17 +184,34 @@ public class WebserviceServet extends HttpServlet {
 				Object ent;
 				switch (req.getMethod()) {
 				case "GET":
+					int page = 0;
+					String pageS = req.getParameter("page");
+					if (StringUtils.isNumeric(pageS)) {
+						page = Integer.parseInt(pageS);
+					}
+					
 					if (req.getParameter("list") != null) {
-						buildList(entityManager, ws, req.getParameter("page"), wrt);
+						List list = getAll(entityManager, ws, page, wrt);
+						ListResult lr = list2ListResult(entityManager, list, ws, page);
+						JAXB.marshal(lr, wrt);
+						resp.setStatus(200);
+					}else
+					if (req.getParameter("example") != null) {
+						String xml = req.getParameter("example");
+						List list = findByExample(entityManager, JAXB.unmarshal(new StringReader(xml), ws), wrt,page,
+								req.getParameter("or") != null);
+						ListResult lr = list2ListResult(entityManager, list, ws, page);
+						JAXB.marshal(lr, wrt);
 					} else {
-						ent = entityManager.find(ws, id);
+						ent = entityManager.find(ws, id); // load one specific by id
 						if (ent == null) {
 							resp.setStatus(404);
 							wrt.write("not found\n");
 							break;
 						}
-						JAXB.marshal(ent, wrt);
 						resp.setStatus(200);
+						JAXB.marshal(ent, wrt);
+
 					}
 					break;
 				case "PUT":
@@ -219,17 +243,57 @@ public class WebserviceServet extends HttpServlet {
 		return;
 	}
 
-	private <T> void buildList(EntityManager entityManager, Class<T> entityClass, String pageS, Writer writer) {
-		int page = 0;
-		if (StringUtils.isNumeric(pageS)) {
-			page = Integer.parseInt(pageS);
+	private <T> List<T> findByExample(EntityManager entityManager, T example, Writer wrt,int page,  boolean or) throws Exception {
+		BeanInfo info = Introspector.getBeanInfo(example.getClass());
+
+		CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+		@SuppressWarnings("unchecked")
+		CriteriaQuery<T> crit = cb.createQuery((Class<T>) example.getClass());
+		@SuppressWarnings("unchecked")
+		Root<T> root = crit.from((Class<T>) example.getClass());
+
+		List<Predicate> crits = new ArrayList<Predicate>();
+		Field[] fields = example.getClass().getDeclaredFields();
+		for (PropertyDescriptor pd : info.getPropertyDescriptors()) {
+			Optional<Field> optField = Arrays.stream(fields).filter(f -> f.getName().equals(pd.getName())).findAny();
+			if (!optField.isPresent())
+				continue;
+			Field field = optField.get();
+
+			if (field.getAnnotation(Transient.class) != null) {
+				continue;
+			}
+
+			if (pd.getReadMethod() == null) {
+				continue;
+			}
+			if (pd.getWriteMethod() == null) {
+				continue;
+			}
+			Object val = pd.getReadMethod().invoke(example);
+			if (val == null) {
+				continue;
+			}
+
+			crits.add(cb.equal(root.get(pd.getName()), val));
 		}
+		Predicate[] ps = crits.toArray(new Predicate[crits.size()]);
 
-		List<T> list = getAll(entityManager, entityClass, page, writer);
+		Predicate finalP = or ? cb.or(ps) : cb.and(ps);
+		TypedQuery<T> qry = entityManager.createQuery(crit.where(finalP));
+		qry.setMaxResults(PAGESIZE);
+		qry.setFirstResult(page * PAGESIZE);
+		
+		return qry.getResultList();
 
+	}
+	
+	private static <T> ListResult list2ListResult(EntityManager entityManager, List<T> list,  Class<T> entityClass,  int page) {
+		
 		ListResult lr = new ListResult();
 		lr.setType(entityClass.getSimpleName());
 		lr.setCount(list.size());
+		lr.setPage(page);
 
 		for (T ent : list) {
 			ListResult.ListEntry le = new ListResult.ListEntry();
@@ -238,8 +302,8 @@ public class WebserviceServet extends HttpServlet {
 			le.setId(id.toString());
 			lr.getEntrys().add(le);
 		}
-
-		JAXB.marshal(lr, writer);
+		
+		return lr;
 	}
 
 	private <T> List<T> getAll(EntityManager em, Class<T> entityClass, int page, Writer writer) {

@@ -6,6 +6,7 @@
   <persistence-unit name="simon_MySQL">
     <properties>
       <property name="openjpa.Log" value="DefaultLevel=WARN, Tool=INFO, SQL=TRACE"/>
+      <property name="openjpa.ConnectionFactoryProperties" value="PrintParameters=true" />
       <property name="openjpa.RuntimeUnenhancedClasses" value="supported"/>
       <property name="jakarta.persistence.jdbc.driver" value="org.mariadb.jdbc.Driver" />
     </properties>
